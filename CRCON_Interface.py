@@ -1,0 +1,116 @@
+import datetime
+import httpx
+from httpx_retries import Retry, RetryTransport
+
+from typing import Tuple, Any
+
+lobal_timeout = httpx.Timeout(15.0, read=None)
+retry = Retry(backoff_factor=2, status_forcelist=[httpx.codes.INTERNAL_SERVER_ERROR, httpx.codes.BAD_GATEWAY])
+transport = RetryTransport(retry=retry)
+
+API_EP = '/api'
+GAME_HISTORY_EP = '/get_scoreboard_maps'
+CURRENT_MAP = '/get_public_info'
+LIVE_GAME_STATS = '/get_live_game_stats'
+RCRON_TIME_STR_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+def convert_s_to_datetime(seconds : int) -> datetime.datetime:
+    return datetime.datetime.fromtimestamp(seconds)
+
+def convert_rcron_time_str_to_datetime(time : str) -> datetime.datetime:
+    return datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
+
+class CRCON_Interface:
+    def __init__(self, server_name, uri):
+        self.server_name = server_name
+        self.uri = uri
+
+    # Return the current game
+    async def get_current_game(self) -> dict[str : str, str : int]:
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            print(f"ERROR: Got a non-200 response code in 'get_current_game' for url: {url}")
+
+        r = response.json()
+        if r['failed']:
+            raise ValueError(f'Bad response from CRCON in \'get_current_game\' for url: {url}')
+
+        current_map = {'map_id' : None, 'start_time_s' : None} 
+        current_map['map_id'] = r['result']['current_map']['map']['id']
+        current_map['start_time_s'] = int(r['result']['current_map']['start'])
+
+        return current_map
+
+    async def get_current_game_stats(self) -> dict[Any : Any]:
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            raise ConnectionError(f'Got a non-200 response code in \'get_current_game_stats\' for url: {url}')
+        
+        r = response.json()
+        if r['failed']:
+            raise ValueError(f'Bad response from CRCON in \'get_current_game_stats\' for url: {url}')
+        
+        return r
+
+    # Is the game with game_id over?
+    async def is_game_over(self, game: dict[str : str, str : int]) -> bool:
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            raise ConnectionError(f'Got a non-200 response code in \'is_game_over\' for url: {url}')
+        
+        r = response.json()
+        if r['failed']:
+            raise ValueError(f'Bad response from CRCON in \'is_game_over\' for url: {url}')
+
+        current_map = await self.get_current_game()
+
+        if game['map_id'] == current_map['map_id'] and game['start_time_s'] == current_map['start_time_s']:
+            return False
+
+        return True
+
+    # Get information about the game
+    async def get_game(self, game: dict[str : str, str : int]) -> dict[any : any]:
+
+        # Make a call to the GAME_HISTORY_EP to first get a list of all the maps..
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{GAME_HISTORY_EP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            raise ConnectionError(f'Got a non-200 response code in \'get_game\' for url: {url}')
+
+        r = response.json()
+        if r['failed']:
+            raise ValueError(f'Bad response from CRCON in \'get_game\' for url: {url}')
+
+        # Now search through the list of resutls and find the game by the id and the start time
+        game_list = r['result']['maps']
+
+        print(game)
+
+        game_start_datetime = convert_s_to_datetime(game['start_time_s'])
+        game_match = None
+        for prev_game in game_list:
+            prev_game_start_time = convert_rcron_time_str_to_datetime(prev_game['start'])
+
+            print(game_start_datetime, prev_game_start_time)
+            print(game['map_id'], prev_game['map']['id'])
+
+            if game['map_id'] == prev_game['map']['id'] and game_start_datetime == prev_game_start_time:
+                game_match = prev_game
+                break
+            else:
+                continue
+
+        return game_match
+    
