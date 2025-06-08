@@ -14,11 +14,17 @@ CURRENT_MAP = '/get_public_info'
 LIVE_GAME_STATS = '/get_live_game_stats'
 RCRON_TIME_STR_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
+EST_TO_GMT = datetime.timedelta(hours=6)
+
 def convert_s_to_datetime(seconds : int) -> datetime.datetime:
-    return datetime.datetime.fromtimestamp(seconds)
+    dt = datetime.datetime.fromtimestamp(seconds)
+    dt = dt + EST_TO_GMT
+    return dt
 
 def convert_rcron_time_str_to_datetime(time : str) -> datetime.datetime:
-    return datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
+    dt = datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
+    print(dt)
+    return dt
 
 class CRCON_Interface:
     def __init__(self, server_name, uri):
@@ -46,17 +52,29 @@ class CRCON_Interface:
 
     async def get_current_game_stats(self) -> dict[Any : Any]:
         async with httpx.AsyncClient(transport=transport) as client:
-            url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
+            url = f'{self.uri}/{API_EP}/{LIVE_GAME_STATS}'
             response = await client.get(url)
 
         if response.status_code != httpx.codes.OK:
             raise ConnectionError(f'Got a non-200 response code in \'get_current_game_stats\' for url: {url}')
         
-        r = response.json()
-        if r['failed']:
+        stats = response.json()
+        if stats['failed']:
+            raise ValueError(f'Bad response from CRCON in \'get_current_game_stats\' for url: {url}')
+
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            print(f"ERROR: Got a non-200 response code in 'get_current_game_stats' for url: {url}")
+
+        public_info = response.json()
+        if public_info['failed']:
             raise ValueError(f'Bad response from CRCON in \'get_current_game_stats\' for url: {url}')
         
-        return r
+        
+        return stats, public_info
 
     # Is the game with game_id over?
     async def is_game_over(self, game: dict[str : str, str : int]) -> bool:
@@ -95,8 +113,6 @@ class CRCON_Interface:
 
         # Now search through the list of resutls and find the game by the id and the start time
         game_list = r['result']['maps']
-
-        print(game)
 
         game_start_datetime = convert_s_to_datetime(game['start_time_s'])
         game_match = None
