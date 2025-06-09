@@ -1,6 +1,9 @@
-import asyncio
+import traceback
+
 from dataclasses import dataclass
 import datetime
+
+import asyncio
 import discord 
 from discord.ext import tasks
 
@@ -33,13 +36,13 @@ class HLLGame:
 
 def was_steamroll(game: HLLGame, threshold_minutes=30):
     if game.game_mode != 'warfare':
-        return False, "No, was an Offensive game", None, None
+        return False, f"Was an Offensive game", None, None
     
     if game.duration > datetime.timedelta(minutes=threshold_minutes):
-        return False, "No, was greater than 45 minutes", None, None
+        return False, f"Was greater than {threshold_minutes} minutes", None, None
 
     if game.axis_score is None or game.allied_score is None:
-        return False, "No, game in progress", None, None
+        return False, f"Game in progress", None, None
 
     if game.axis_score > game.allied_score:
         winner = 'Axis'
@@ -48,7 +51,7 @@ def was_steamroll(game: HLLGame, threshold_minutes=30):
         winner = 'Allies'
         loser = 'Axis'
 
-    return True, "Yes, less than 45 minutes", winner, loser
+    return True, f"Less than {threshold_minutes} minutes", winner, loser
 
 def process_game(server, game) -> HLLGame:
     start_time=datetime.datetime.strptime(game['start'], RCRON_TIME_STR_FORMAT)
@@ -151,19 +154,20 @@ async def check_for_steamroll():
         result = process_game(server, game_result) 
     except Exception as e:
         print(f"Error there was an exception in 'process_game'", e)
-        print(e.with_traceback())
+        print(traceback.format_exc())
         await channel.send("We had an exception in 'process_game'...")
 
     try:
-        if was_steamroll(result):
-            print(f"Steam roll for game {current_game['map_id']}")
-            await channel.send(f"Game {current_game['map_id']} was a steamroll!")
+        was_steamroll_result, reason, winner, loser = was_steamroll(result)
+        if was_steamroll_result:
+            print(f"Steam roll for game {current_game['map_id']} - {was_steamroll_result}, {reason}, Winner: {winner} Loser: {loser}")
+            await channel.send(f"Game {current_game['map_id']} was a steamroll! {reason} Winner: {winner} Loser: {loser}")
         else:
-            print(f"Game on {current_game['map_id']} was NOT a steam roll")
-            await channel.send(f"Game {current_game['map_id']} was NOT a steamroll!")
+            print(f"Game on {current_game['map_id']} was NOT a steam roll - {reason}")
+            await channel.send(f"Game {current_game['map_id']} was NOT a steamroll! - {reason}")
     except Exception as e:
         print("There was an exception in was_streamroll..", e)
-        print(e.with_traceback())
+        print(traceback.format_exc())
         await channel.send("We had an exception in 'was_steamroll'...")
 
     current_game = None
