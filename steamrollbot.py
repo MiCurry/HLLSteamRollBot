@@ -8,6 +8,7 @@ import discord
 from discord.ext import tasks
 
 from CRCON_Interface import RCRON_TIME_STR_FORMAT, CRCON_Interface
+from HLLStatsDigester import process_stats
 
 CHANNEL_ID = 1380967531673682020
 
@@ -108,7 +109,31 @@ def is_server_seeding(public_info) -> bool:
     
     return False
 
-@tasks.loop(minutes=5)
+import numpy as np
+def process_n_print_stats(info, stats_raw):
+    print("Inside process_n_print_stats")
+    time_remaining = datetime.timedelta(seconds=info['result']['time_remaining'])
+    stats = process_stats(stats_raw)
+
+
+    print("")
+    print(f"Map: {info['result']['current_map']['map']['pretty_name']}")
+    print(f"Time Left: {time_remaining}")
+    print("Axis - Allies")
+    print(f"{info['result']['score']['axis']} - {info['result']['score']['allied']}")
+
+    for stat_name in stats['allied'].keys():
+        if (type(stats['allied'][stat_name]) == np.ndarray
+            or stat_name == 'side'):
+            continue 
+
+        stat_axis = stats['axis'][stat_name]
+        stat_allied = stats['allied'][stat_name]
+        print(f'{stat_name}: \t {stat_axis:,.2f} - {stat_allied:,.2f}')
+
+
+
+@tasks.loop(minutes=2)
 async def check_for_steamroll():
     print("We are checking for a steamroll...")
     global server
@@ -126,18 +151,20 @@ async def check_for_steamroll():
         stats, public_info = await server.get_current_game_stats()
         if is_server_empty(public_info):
             print("The server is empty!")
-            await channel.send(f"The server is empty!")
+            #await channel.send(f"The server is empty!")
         elif is_server_seeding(public_info):
             print(f"The server is seeding! Number of players: {len(stats['result']['stats'])}")
-            await channel.send(f"The server is seeding! Number of players: {len(stats['result']['stats'])}")
+            #await channel.send(f"The server is seeding! Number of players: {len(stats['result']['stats'])}")
         else:
             time_remaining = datetime.timedelta(seconds=public_info['result']['time_remaining'])
             score = f"Ax: {public_info['result']['score']['axis']} Al: {public_info['result']['score']['allied']}"
             print(f"Game is still on {current_game['map_id']}... Time Left: {time_remaining} - Score: {score}")
+            process_n_print_stats(public_info, stats)
             await channel.send(f"Game is still on {current_game['map_id']}... Time Left: {time_remaining} - Score: {score}")
             
         current_game = game
-        print(f"Current game: {current_game}")
+        current_game['stats'].append(stats)
+        #print(f"Current game: {current_game}")
         return
 
     # Check if the game is actually over

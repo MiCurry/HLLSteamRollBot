@@ -23,7 +23,6 @@ def convert_s_to_datetime(seconds : int) -> datetime.datetime:
 
 def convert_rcron_time_str_to_datetime(time : str) -> datetime.datetime:
     dt = datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
-    print(dt)
     return dt
 
 class CRCON_Interface:
@@ -118,9 +117,6 @@ class CRCON_Interface:
         game_match = None
         for prev_game in game_list:
             prev_game_start_time = convert_rcron_time_str_to_datetime(prev_game['start'])
-
-            print(game_start_datetime, prev_game_start_time)
-            print(game['map_id'], prev_game['map']['id'])
 
             if game['map_id'] == prev_game['map']['id'] and game_start_datetime == prev_game_start_time:
                 game_match = prev_game
