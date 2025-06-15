@@ -25,10 +25,13 @@ def convert_rcron_time_str_to_datetime(time : str) -> datetime.datetime:
     dt = datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
     return dt
 
-class CRCON_Interface:
+class HLLServer:
     def __init__(self, server_name, uri):
         self.server_name = server_name
         self.uri = uri
+
+    def process_game_stats(self):
+        pass
 
     # Return the current game
     async def get_current_game(self) -> dict[str : str, str : int]:

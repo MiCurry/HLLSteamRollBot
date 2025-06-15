@@ -7,7 +7,7 @@ import asyncio
 import discord 
 from discord.ext import tasks
 
-from CRCON_Interface import RCRON_TIME_STR_FORMAT, CRCON_Interface
+from HllServer import RCRON_TIME_STR_FORMAT, HLLServer
 from HLLStatsDigester import process_stats
 
 CHANNEL_ID = 1380967531673682020
@@ -20,7 +20,7 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-server = CRCON_Interface('Glow\'s East', 'https://scoreboard-us-east-1.glows.gg/')
+server = HLLServer('Glow\'s East', 'https://scoreboard-us-east-1.glows.gg/')
 current_game = None
 
 @dataclass

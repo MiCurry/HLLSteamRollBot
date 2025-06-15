@@ -5,13 +5,13 @@ import asyncio
 import numpy as np
 np.set_printoptions(precision=3, suppress=True)
 
-from CRCON_Interface import CRCON_Interface
-from HLLStatsDigester import process_stats
+from HllServer import HLLServer
+from HLLStatsDigester import HllGameStats, HllSideStats
 import runner
 
 
 async def main():
-    server = CRCON_Interface('glows east', 'https://scoreboard-us-east-1.glows.gg/')
+    server = HLLServer('glows east', 'https://scoreboard-us-east-1.glows.gg/')
 
     current_game = await server.get_current_game()
 
@@ -48,8 +48,19 @@ async def main():
         print(f'{stat_name}: \t {stat_axis:,.2f} - {stat_allied:,.2f}')
 
 
+async def test_hllStatsDigester():
+    #server = HLLServer('glows east', 'https://scoreboard-us-east-1.glows.gg/')
+    server = HLLServer('soul one', 'https://soul-one-stats.hlladmin.com/')
 
+    hllGame = HllGameStats()
+
+    stats, public = await server.get_current_game_stats()
+
+    hllGame.process_stats(stats, public)
+    
+
+    pass
 
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-asyncio.run(main())
+asyncio.run(test_hllStatsDigester())
