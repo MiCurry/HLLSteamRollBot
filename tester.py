@@ -6,7 +6,7 @@ import numpy as np
 np.set_printoptions(precision=3, suppress=True)
 
 from HllServer import HLLServer
-from HLLStatsDigester import HllGameStats, HllSideStats
+from HLLStatsDigester import HllGameStatsSlice, HllSideStats
 import runner
 
 
@@ -52,7 +52,7 @@ async def test_hllStatsDigester():
     #server = HLLServer('glows east', 'https://scoreboard-us-east-1.glows.gg/')
     server = HLLServer('soul one', 'https://soul-one-stats.hlladmin.com/')
 
-    hllGame = HllGameStats()
+    hllGame = HllGameStatsSlice()
 
     stats, public = await server.get_current_game_stats()
 
