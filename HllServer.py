@@ -1,4 +1,5 @@
 import datetime
+from HLLStatsDigester import HllGame
 import httpx
 from httpx_retries import Retry, RetryTransport
 
@@ -12,9 +13,9 @@ API_EP = '/api'
 GAME_HISTORY_EP = '/get_scoreboard_maps'
 CURRENT_MAP = '/get_public_info'
 LIVE_GAME_STATS = '/get_live_game_stats'
+EST_TO_GMT = datetime.timedelta(hours=6)
 RCRON_TIME_STR_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
-EST_TO_GMT = datetime.timedelta(hours=6)
 
 def convert_s_to_datetime(seconds : int) -> datetime.datetime:
     dt = datetime.datetime.fromtimestamp(seconds)
@@ -25,13 +26,16 @@ def convert_rcron_time_str_to_datetime(time : str) -> datetime.datetime:
     dt = datetime.datetime.strptime(time, RCRON_TIME_STR_FORMAT)
     return dt
 
-class CRCON_Interface:
+class HLLServer:
     def __init__(self, server_name, uri):
         self.server_name = server_name
         self.uri = uri
 
+    def process_game_stats(self):
+        pass
+
     # Return the current game
-    async def get_current_game(self) -> dict[str : str, str : int]:
+    async def get_current_game(self) -> HllGame:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
@@ -44,10 +48,10 @@ class CRCON_Interface:
             raise ValueError(f'Bad response from CRCON in \'get_current_game\' for url: {url}')
 
         current_map = {'map_id' : None, 'start_time_s' : None} 
-        current_map['map_id'] = r['result']['current_map']['map']['id']
-        current_map['start_time_s'] = int(r['result']['current_map']['start'])
+        map_id = r['result']['current_map']['map']['id']
+        start_time_s = int(r['result']['current_map']['start'])
 
-        return current_map
+        return HllGame(self, map_id, start_time_s)
 
     async def get_current_game_stats(self) -> dict[Any : Any]:
         async with httpx.AsyncClient(transport=transport) as client:
@@ -76,7 +80,7 @@ class CRCON_Interface:
         return stats, public_info
 
     # Is the game with game_id over?
-    async def is_game_over(self, game: dict[str : str, str : int]) -> bool:
+    async def is_game_over(self, game: HllGame) -> bool:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
@@ -90,7 +94,7 @@ class CRCON_Interface:
 
         current_map = await self.get_current_game()
 
-        if game['map_id'] == current_map['map_id'] and game['start_time_s'] == current_map['start_time_s']:
+        if game.map == current_map.map and game.start_time_s == current_map.start_time_s:
             return False
 
         return True
@@ -113,12 +117,12 @@ class CRCON_Interface:
         # Now search through the list of resutls and find the game by the id and the start time
         game_list = r['result']['maps']
 
-        game_start_datetime = convert_s_to_datetime(game['start_time_s'])
+        game_start_datetime = convert_s_to_datetime(game.start_time_s)
         game_match = None
         for prev_game in game_list:
             prev_game_start_time = convert_rcron_time_str_to_datetime(prev_game['start'])
 
-            if game['map_id'] == prev_game['map']['id'] and game_start_datetime == prev_game_start_time:
+            if game.map == prev_game['map']['id'] and game_start_datetime == prev_game_start_time:
                 game_match = prev_game
                 break
             else:

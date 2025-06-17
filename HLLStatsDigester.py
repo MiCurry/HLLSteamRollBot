@@ -1,271 +1,219 @@
 # Give me a CRCON Server and I'll give you stats
-from typing import Tuple, TypedDict
+from dataclasses import dataclass
+from typing import List, Tuple, TypedDict
 
 from weapons import Team, detect_team
 import numpy as np
-np.set_printoptions(precision=3)
+import numpy.ma as ma
 
-class Stats(TypedDict):
-    side : Team = None
-    nplayers : int = 0
+INITAL_DATA_ARRAY_SIZE = 70
 
-    combat_list : list[int] = []
-    combat : int = 0
-    avg_combat : float = 0.0
+@dataclass
+class HllStat:
+    name : str
+    rcron_name : str
+    short_name : str
+    compute_sum : bool
+    compute_mean : bool
+    compute_median : bool
+    compute_std : bool
 
-    offense_list : list[int] = []
-    offense : int = 0
-    avg_offense : float = 0.0
+@dataclass
+class StatData:
+    name : str
+    data : np.ndarray
+    sum : float
+    mean : float
+    median : float
+    std : float
 
-    defense_list : list[int] = []
-    defense : int = 0
-    avg_defense : float = 0.0
+class Stat:
+    def __init__(self, hllStat : HllStat):
+        self.hllStat = hllStat
+        self._data = StatData(name=self.hllStat.name,
+                             data=np.ma.masked_all((INITAL_DATA_ARRAY_SIZE,)),
+                             sum=None,
+                             mean=None,
+                             median=None,
+                             std=None)
+        self.nvalues = 0
 
-    support_list : list[int] = []
-    support : int = 0
-    avg_support : float = 0.0
+    def __str__(self) -> str:
+        return f'<Stat(Name:{self.short_name}, nValues:{self.nvalues})>'
+    
+    @property
+    def data(self) -> np.ndarray:
+        return self._data.data
 
-    kills_list : list[int] = []
-    kills : int = 0
-    avg_kills : float = 0.0
+    @property
+    def name(self) -> str:
+        return self.hllStat.name
 
-    deaths_list : list[int] = []
-    deaths : int = 0
-    avg_deaths : float = 0.0
+    @property
+    def short_name(self) -> str:
+        return self.hllStat.short_name
 
-    kd_list : list[float] = []
-    avg_kd : float = 0.0
-    team_kd : float = 0.0
+    @property
+    def rcron_name(self) -> str:
+        return self.hllStat.rcron_name
 
-    teamkills_list : list[int] = []
-    teamkills : int = 0
-    avg_team_kills : float = 0.0
+    @property
+    def sum(self) -> str:
+        return self.data.sum
 
-    kills_per_minute_list : list[float] = []
-    avg_kills_per_minute : float = 0.0
+    @property
+    def mean(self) -> str:
+        return self.data.mean
 
-    deaths_per_minute_list : list[float] = []
-    avg_deaths_per_minute : float = 0.0
+    @property
+    def median(self) -> str:
+        return self.data.median
 
-    kill_streak_list : list[int]
-    avg_kill_streak : float = 0.0
+    @property
+    def std(self) -> str:
+        return self.data.std
 
-    death_streak_list : list[int]
-    avg_death_streak : float = 0.0
+    def add_datum(self, datum):
+        self.data[self.nvalues] = datum
+        self.nvalues += 1
 
-    deaths_without_kill_streak_list : list[int]
-    avg_deaths_without_kill_streak : float = 0.0
+    def compute_stats(self):
+        if self.hllStat.compute_sum:
+            self.compute_sum()
 
-    longest_life_list : list[float]
-    avg_longest_life : float = 0.0
+        if self.hllStat.compute_mean:
+            self.compute_mean()
 
-    shortest_life_list : list[float]
-    avg_shortest_life : float = 0.0
+        if self.hllStat.compute_median:
+            self.compute_mean()
 
+        if self.hllStat.compute_std:
+            self.compute_std()
 
-def new_stats():
-    return Stats(side=None,
-                 nplayers=0,
-                 combat_list=[],
-                 combat=0,
-                 avg_combat=0.0,
-                 offense_list=[],
-                 offense=0,
-                 avg_offense=0.0,
-                 defense_list=[],
-                 defense=0,
-                 avg_defense=0.0,
-                 support_list=[],
-                 support=0,
-                 avg_support=0.0,
-                 kills_list=[],
-                 kills=0,
-                 avg_kills=0.0,
-                 deaths_list=[],
-                 deaths=0,
-                 avg_deaths=0.0,
-                 kd_list=[],
-                 avg_kd=0.0,
-                 team_kd=0.0,
-                 teamkills_list=[],
-                 teamkills=0,
-                 kills_per_minute_list=[],
-                 avg_kills_per_minute=0.0,
-                 deaths_per_minute_list=[],
-                 avg_deaths_per_minute=0.0,
-                 kill_streak_list=[],
-                 avg_kill_streak=0.0,
-                 death_streak_list=[],
-                 avg_death_streak=0.0,
-                 deaths_without_kill_streak_list=[],
-                 avg_deaths_without_kill_streak=0.0,
-                 longest_life_list=[],
-                 avg_longest_life=0.0,
-                 shortest_life_list=[],
-                 avg_shortest_life=0.0,
-                 avg_team_kills=[]
-                )
+    def compute_sum(self):
+        self.data.sum = np.sum(self.data)
 
-class GameStats(TypedDict):
-    allied : Stats = None
-    axis : Stats = None
+    def compute_mean(self):
+        self.data.mean = np.average(self.data)
 
-def add_to_stat(stats, side, player, stat):
-    stats[side][stat] += player[stat]
+    def compute_median(self):
+        self.data.median = np.median(self.data)
 
+    def compute_std(self):
+        self.data.std = np.std(self.data)
 
-def grab_raw_stats(stats_json):
-    stats = GameStats(allied=new_stats(), axis=new_stats())
+class HllSideStats:
+    def __getattr__(self, name):
+        if name == 'score' or name == 'Score':
+            return self.score 
 
-    for player in stats_json['result']['stats']:
+        return self.stats_dict[name]
 
-        res = detect_team(player)
+    def __contains__(self, key):
+        return key in self.stats_dict
 
-        if res['side'] == Team.UNKNOWN:
-            continue
+    def __init__(self, team=Team.UNKNOWN):
+        self.side : Team = team
 
-        if res['side'] == Team.ALLIES:
-            side = 'allied'
-        elif res['side'] == Team.AXIS:
-            side = 'axis'
-        else:
-            continue
+        self.stats : List[Stat] = []
+        self.stats_dict : dict = {}
 
-        stats[side]['nplayers'] += 1
-        stats[side]['side'] = res['side']
+        self.time_remaing_secs : int = 0
+        self.score : int = 0
+        self.nplayers : int = 0
 
-        add_to_stat(stats, side, player, 'combat')
-        stats[side]['combat_list'].append(player['combat'])
+        self.create_stat('Combat', 'combat')
+        self.create_stat('Offense', 'offense')
+        self.create_stat('Defense', 'defense')
+        self.create_stat('Support', 'support')
+        self.create_stat('Kills', 'kills')
+        self.create_stat('Deaths', 'deaths')
 
-        add_to_stat(stats, side, player, 'offense')
-        stats[side]['offense_list'].append(player['offense'])
+        self.create_stat('Teamkills', 'teamkills') 
+        self.create_stat('Teamkill Streak', 'teamkills_streak')
 
-        add_to_stat(stats, side, player, 'defense')
-        stats[side]['defense_list'].append(player['defense'])
+        self.create_stat('Kills Per Minute', 'kills_per_minute', short_name='KPM')
+        self.create_stat('Deaths Per Minute', 'deaths_per_minute', short_name='DPM')
 
-        add_to_stat(stats, side, player, 'support')
-        stats[side]['support_list'].append(player['support'])
+        self.create_stat('Kill Death Ratio', 'kill_death_ratio', short_name='KD')
 
-        add_to_stat(stats, side, player, 'kills')
-        stats[side]['kills_list'].append(player['kills'])
+        self.create_stat('Deaths w/o Kill Streak', 'deaths_without_kill_streak')
 
-        add_to_stat(stats, side, player, 'deaths')
-        stats[side]['deaths_list'].append(player['deaths'])
+        self.create_stat('Longest Life', 'longest_life_secs')
+        self.create_stat('Shortest Life', 'shortest_life_secs')
 
-        add_to_stat(stats, side, player, 'teamkills')
-        stats[side]['teamkills_list'].append(player['teamkills'])
+    def create_stat(self, 
+                    name : str, 
+                    rcon_name: str,
+                    short_name : str=None,
+                    compute_sum=True,
+                    compute_mean=True,
+                    compute_median=True,
+                    compute_std=True):
 
-        stats[side]['kd_list'].append(player['kill_death_ratio'])
+        if short_name is None:
+            short_name = name
 
-        stats[side]['kills_per_minute_list'].append(player['kills_per_minute'])
+        statInfo = HllStat(name=name,
+                       rcron_name=rcon_name,
+                       short_name=short_name,
+                       compute_sum=compute_sum,
+                       compute_mean=compute_mean,
+                       compute_median=compute_median,
+                       compute_std=compute_std)
+        stat = Stat(statInfo)
+        
+        self.stats.append(stat)
+        self.stats_dict[rcon_name] = stat
 
-        stats[side]['deaths_per_minute_list'].append(player['deaths_per_minute'])
+    def compute_stats(self):
+        for stat in self.stats:
+            stat.compute_stats()
 
-        stats[side]['kill_streak_list'].append(player['kills_streak'])
+    def add_datum(self, name, stat):
+        if name not in self:
+            raise ValueError(f"'{name}' not in this HllSideStats object")
 
-        stats[side]['deaths_without_kill_streak_list'].append(player['deaths_without_kill_streak'])
-
-        stats[side]['longest_life_list'].append(player['longest_life_secs'])
-
-        stats[side]['shortest_life_list'].append(player['shortest_life_secs'])
-
-        stats[side]['teamkills_list'].append(player['teamkills'])
-
-    return stats
-
-
-def process_stats(raw_stats):
-    team_stats = grab_raw_stats(raw_stats)
-
-    for team in team_stats.values():
-        for stat in team:
-            if type(team[stat]) == list:
-                team[stat] = np.array(team[stat])
-
-        team['combat'] = np.sum(team['combat_list'])
-        team['avg_combat'] = np.average(team['combat_list'])
-
-        team['offense'] = np.sum(team['offense_list'])
-        team['avg_offense'] = np.average(team['offense_list'])
-
-        team['defense'] = np.sum(team['defense_list'])
-        team['avg_defense'] = np.average(team['defense_list'])
-
-        team['support'] = np.sum(team['support_list'])
-        team['avg_support'] = np.average(team['support_list'])
-
-        team['kills'] = np.sum(team['kills_list'])
-        team['avg_kills'] = np.average(team['kills_list'])
-
-        team['deaths'] = np.sum(team['deaths_list'])
-        team['avg_deaths'] = np.average(team['deaths_list'])
-
-        team['avg_kd'] = np.average(team['kd_list'])
-        team['team_kd'] = team['kills'] / team['deaths']
-
-        team['teamkills'] = np.sum(team['teamkills_list'])
-        team['avg_teamkills'] = np.average(team['teamkills_list'])
-
-        team['avg_kills_per_minute'] = np.average(team['kills_per_minute_list'])
-
-        team['avg_deaths_per_minute'] = np.average(team['deaths_per_minute_list'])
-
-        team['avg_kill_streak'] = np.average(team['kill_streak_list'])
-
-        team['avg_deaths_without_kill_streak'] = np.average(team['deaths_without_kill_streak_list'])
-
-        team['avg_shortest_life'] = np.average(team['longest_life_list'])
-
-        team['avg_shortest_life'] = np.average(team['shortest_life_list'])
-
-    return team_stats
-
-
+        data : Stat = self.stats_dict[name]
+        data.add_datum(stat)
         
 
 
+class HllGameStats:
+    def __init__(self, stats=None, public_info=None):
+        self.axis = HllSideStats(Team.AXIS)
+        self.allied = HllSideStats(Team.ALLIES)
+        self.teams = {Team.AXIS: self.axis,
+                      Team.ALLIES : self.allied}
+        self.total_players : int = 0
 
+        if stats is not None and public_info is not None:
+            self.process_stats(stats, public_info)
 
+    def process_stats(self, rcon_stats, public_info):
+        self._process_public_info(public_info)
+        player_stats = rcon_stats['result']['stats']
 
-class HLLStatsDigester:
-    def __init__(self, server):
-        self.server = server
-        stats, public = self.get_stats()
-        self.stats = {'stats' : stats, 'public_info' : public}
+        for player in player_stats:
+            team, _ = detect_team(player)
 
-    def get_stats(self):
-        return self.server.get_current_game_stats()
+            if team == Team.UNKNOWN:
+                continue
 
-    @property
-    def player_count(self) -> int:
-        return self.stats['public_info']['player_count']
+            for stat in player:
+                if stat not in self.teams[team]:
+                    continue
 
-    @property
-    def nallied(self) -> int:
-        return self.stats['public_info']['player_count_by_team']['allied']
+                self.teams[team].add_datum(stat, player[stat])
 
-    @property
-    def naxis(self) -> int:
-        return self.stats['public_info']['player_count_by_team']['axis']
+    def _process_public_info(self, public_info):
+        public_info = public_info['result']
+        self.axis.time_remaing_secs = public_info['time_remaining']
+        self.allied.time_remaing_secs = public_info['time_remaining']
 
-    @property
-    def score_raw(self) -> dict[str : int, str : int]:
-        return self.stats['public_info']['score']
+        self.axis.score = public_info['score']['axis']
+        self.allied.score = public_info['score']['allied']
 
-    @property
-    def score_allied_axis(self) -> tuple[int, int]:
-        return (self.stats['public_info']['score']['allied'],
-                self.stats['public_info']['score']['axis'])
-    
-    @property
-    def allied_score(self) -> int:
-        return self.stats['public_info']['score']['allied']
-
-    @property
-    def axis_score(self) -> int:
-        return self.stats['public_info']['score']['axis']
-
-    @property
-    def time_remaining_s(self) -> int:
-        return self.stats['public_info']['time_remaining']
-
+        self.total_players = public_info['player_count']
+        self.axis.nplayers = public_info['player_count_by_team']['axis']
+        self.allied.nplayers = public_info['player_count_by_team']['allied']
