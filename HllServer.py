@@ -1,5 +1,5 @@
 import datetime
-from HLLStatsDigester import HllGame
+from HLLStatsDigester import HllGameStats
 import httpx
 from httpx_retries import Retry, RetryTransport
 
@@ -31,11 +31,8 @@ class HLLServer:
         self.server_name = server_name
         self.uri = uri
 
-    def process_game_stats(self):
-        pass
-
     # Return the current game
-    async def get_current_game(self) -> HllGame:
+    async def get_current_game(self) -> HllGameStats:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
@@ -51,7 +48,7 @@ class HLLServer:
         map_id = r['result']['current_map']['map']['id']
         start_time_s = int(r['result']['current_map']['start'])
 
-        return HllGame(self, map_id, start_time_s)
+        return HllGameStats(self, map_id, start_time_s)
 
     async def get_current_game_stats(self) -> dict[Any : Any]:
         async with httpx.AsyncClient(transport=transport) as client:
@@ -80,7 +77,7 @@ class HLLServer:
         return stats, public_info
 
     # Is the game with game_id over?
-    async def is_game_over(self, game: HllGame) -> bool:
+    async def is_game_over(self, game: HllGameStats) -> bool:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
@@ -129,4 +126,20 @@ class HLLServer:
                 continue
 
         return game_match
+
+
+    async def get_history(self) -> dict[any : any]:
+        async with httpx.AsyncClient(transport=transport) as client:
+            url = f'{self.uri}/{API_EP}/{GAME_HISTORY_EP}'
+            response = await client.get(url)
+
+        if response.status_code != httpx.codes.OK:
+            raise ConnectionError(f'Got a non-200 response code in \'get_history\' for url: {url}')
+
+        r = response.json()
+        if r['failed']:
+            raise ValueError(f'Bad response from CRCON in \'get_history\' for url: {url}')
+
+        return r['result']['maps']
+
     

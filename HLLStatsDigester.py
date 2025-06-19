@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import List, Tuple, TypedDict
 
-from weapons import Team, detect_team
+from utilities import Team, detect_team
 import numpy as np
 import numpy.ma as ma
 
