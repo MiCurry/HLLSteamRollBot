@@ -20,8 +20,8 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-#server = HLLServer('Glow\'s East', 'https://scoreboard-us-east-1.glows.gg/')
-server = HLLServer('soul one', 'https://soul-one-stats.hlladmin.com/')
+server = HLLServer('Glow\'s East', 'https://scoreboard-us-east-1.glows.gg/')
+#server = HLLServer('soul one', 'https://soul-one-stats.hlladmin.com/')
 current_game = None
 
 

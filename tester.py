@@ -1,13 +1,13 @@
 import datetime
 import sys
 import asyncio
+import time
 
 import numpy as np
 np.set_printoptions(precision=3, suppress=True)
 
 from HllServer import HLLServer
-from HLLStatsDigester import HllGameStatsSlice, HllSideStats
-import runner
+from HLLStatsDigester import HllGame, HllGameStatsSlice, HllSideStats
 
 
 async def main():
@@ -24,7 +24,6 @@ async def main():
 
     game = await server.get_game(past_game)
 
-    
     hllgame = runner.process_game(server, game)
     runner.was_steamroll(hllgame)
 
@@ -52,7 +51,7 @@ async def test_hllStatsDigester():
     #server = HLLServer('glows east', 'https://scoreboard-us-east-1.glows.gg/')
     server = HLLServer('soul one', 'https://soul-one-stats.hlladmin.com/')
 
-    hllGame = HllGameStatsSlice()
+    hllGame = HllGameStats()
 
     stats, public = await server.get_current_game_stats()
 
@@ -61,6 +60,36 @@ async def test_hllStatsDigester():
 
     pass
 
+async def test_process_games():
+    server = HLLServer('glows east', 'https://scoreboard-us-central-1.glows.gg/')
+
+    games = await server.get_history()
+
+    for game in games:
+        hllgame = HllGame()
+        hllgame.process_game_result(game)
+        if hllgame.was_steamroll():
+            print("Was steamroll", hllgame)
+
+async def test_stats_to_numpy():
+    server = HLLServer('glows east', 'https://scoreboard-us-central-1.glows.gg/')
+
+    current_game = await server.get_current_game()
+    stats, public_info = await server.get_current_game_stats()
+    current_game.add_stat_slice(stats, public_info)
+
+    time.sleep(5)
+
+    stats, public_info = await server.get_current_game_stats()
+    current_game.add_stat_slice(stats, public_info)
+
+    current_game.to_numpy()
+    current_game.save_stat_slice('foo.csv')
+
+    current_game.save_y('foo.csv')
+
+
+
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-asyncio.run(test_hllStatsDigester())
+asyncio.run(test_stats_to_numpy())

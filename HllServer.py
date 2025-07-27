@@ -1,5 +1,5 @@
 import datetime
-from HLLStatsDigester import HllGameStats
+from HLLStatsDigester import HllGame, HllGameStatsSlice 
 import httpx
 from httpx_retries import Retry, RetryTransport
 
@@ -32,7 +32,7 @@ class HLLServer:
         self.uri = uri
 
     # Return the current game
-    async def get_current_game(self) -> HllGameStats:
+    async def get_current_game(self) -> HllGame:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
@@ -48,7 +48,7 @@ class HLLServer:
         map_id = r['result']['current_map']['map']['id']
         start_time_s = int(r['result']['current_map']['start'])
 
-        return HllGameStats(self, map_id, start_time_s)
+        return HllGame(self, map_id, start_time_s)
 
     async def get_current_game_stats(self) -> dict[Any : Any]:
         async with httpx.AsyncClient(transport=transport) as client:
@@ -77,7 +77,7 @@ class HLLServer:
         return stats, public_info
 
     # Is the game with game_id over?
-    async def is_game_over(self, game: HllGameStats) -> bool:
+    async def is_game_over(self, game: HllGameStatsSlice) -> bool:
         async with httpx.AsyncClient(transport=transport) as client:
             url = f'{self.uri}/{API_EP}/{CURRENT_MAP}'
             response = await client.get(url)
